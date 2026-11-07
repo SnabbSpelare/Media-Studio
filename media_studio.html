@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Media Studio</title>
+  <!-- Default Dynamic Favicon Anchor -->
+  <link id="dynamicFavicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* CSS Optimization Hints for Massive DOM Rendering */
+    .media-card {
+      content-visibility: auto;
+      contain-intrinsic-size: 1px 250px;
+      contain: layout style paint;
+    }
+
+    /* Prevent native media dragging inside lightbox */
+    #lightbox img,
+    #lightbox video {
+      -webkit-user-drag: none;
+      -khtml-user-drag: none;
+      -moz-user-drag: none;
+      -o-user-drag: none;
+      user-drag: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    
+    /* Top Scroll Progress Bar */
+    #scrollProgressBar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      width: 0%;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      z-index: 100;
+      transition: width 0.1s ease-out;
+      pointer-events: none;
+    }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    /* Skeleton Loading Effect */
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton-loading {
+      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden select-none bg-slate-950 text-slate-100">
+
+  <!-- Scroll Progress Indicator -->
+  <div id="scrollProgressBar" class="transition-opacity duration-200"></div>
+
+  <!-- TOP HEADER NAVBAR -->
+  <header class="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-4 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="p-2 bg-blue-600/20 text-blue-400 rounded-lg">
+        <i data-lucide="layers" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg leading-none text-slate-100">Media Studio</h1>
+        <p class="text-xs text-slate-400 mt-1" id="statsCount">0 items loaded</p>
+      </div>
+    </div>
+
+    <!-- Search & Quick Filters -->
+    <div class="flex items-center space-x-3 max-w-xl flex-1 mx-4">
+      <div class="relative w-full max-w-xs">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input type="text" id="searchInput" placeholder="Search filenames..." 
+               class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors">
+      </div>
+      <div class="hidden md:flex bg-slate-950 p-1 border border-slate-800 rounded-lg text-xs font-medium">
+        <button class="filter-btn px-3 py-1 rounded-md bg-blue-600 text-white transition" data-filter="all">All</button>
+        <button class="filter-btn px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition" data-filter="image">Images</button>
+        <button class="filter-btn px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition" data-filter="video">Videos</button>
+        <button class="filter-btn px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition" data-filter="gif">GIFs</button>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center space-x-2">
+      <!-- Folder Upload Input (Hidden) -->
+      <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+      <!-- File Upload Input (Hidden) -->
+      <input type="file" id="fileInput" multiple accept="image/*,video/*" class="hidden">
+
+      <button id="selectFolderBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-lg shadow-blue-600/20 active:scale-95">
+        <i data-lucide="folder-plus" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Open Folder</span>
+      </button>
+
+      <button id="selectFilesBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2 transition border border-slate-700 active:scale-95">
+        <i data-lucide="file-plus" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Add Files</span>
+      </button>
+
+      <button id="settingsBtn" class="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition" title="Settings">
+        <i data-lucide="settings" class="w-5 h-5"></i>
+      </button>
+
+      <button id="clearBtn" class="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition" title="Clear Gallery">
+        <i data-lucide="trash-2" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN GALLERY WRAPPER -->
+  <main class="flex-1 overflow-y-auto p-4 relative" id="galleryContainer">
+    
+    <!-- Empty State -->
+    <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 pointer-events-auto">
+      <div class="w-20 h-20 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 mb-4 shadow-xl">
+        <i data-lucide="hard-drive-upload" class="w-10 h-10"></i>
+      </div>
+      <h2 class="text-xl font-bold text-slate-200 mb-1">No Local Assets Loaded</h2>
+      <p class="text-slate-400 text-sm max-w-md mb-6">Load hundreds of local photos, GIFs, and videos smoothly without uploading to any server. Everything runs locally in memory.</p>
+      <div class="flex items-center space-x-4">
+        <button onclick="document.getElementById('folderInput').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center space-x-2 shadow-lg shadow-blue-500/20 transition active:scale-95">
+          <i data-lucide="folder" class="w-4 h-4"></i>
+          <span>Select Directory</span>
+        </button>
+        <button onclick="document.getElementById('fileInput').click()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-xl font-medium text-sm flex items-center space-x-2 border border-slate-700 transition active:scale-95">
+          <i data-lucide="files" class="w-4 h-4"></i>
+          <span>Select Files</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Responsive Media Grid -->
+    <div id="mediaGrid" class="grid gap-3 transition-all duration-200 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 auto-rows-fr">
+      <!-- Media Cards injected dynamically -->
+    </div>
+  </main>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settingsModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl relative transform scale-95 transition-transform duration-200" id="settingsBox">
+      <div class="flex items-center justify-between mb-5 border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-2 text-slate-100 font-semibold text-lg">
+          <i data-lucide="sliders" class="w-5 h-5 text-blue-400"></i>
+          <span>Gallery Settings</span>
+        </div>
+        <button id="closeSettingsBtn" class="text-slate-400 hover:text-slate-100 p-1 rounded-lg hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <!-- Scroll Progress Toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Show Scroll Progress Bar</div>
+            <div class="text-xs text-slate-400">Display scroll progress at top of page</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="settingShowProgressBar" class="sr-only peer" checked>
+            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <!-- Show Duplicates Toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Show Duplicate Assets</div>
+            <div class="text-xs text-slate-400">Display identical files if already present</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="settingShowDuplicates" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <!-- Autoplay Toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Autoplay Videos</div>
+            <div class="text-xs text-slate-400">Automatically play visible videos</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="settingAutoplay" class="sr-only peer" checked>
+            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <!-- Mute State Toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Mute Videos by Default</div>
+            <div class="text-xs text-slate-400">Prevent audio overlaps during playback</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="settingMuted" class="sr-only peer" checked>
+            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <!-- Deduplication Toggle -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Prevent Duplicate Imports</div>
+            <div class="text-xs text-slate-400">SHA-256 fingerprint deduplication</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="settingDeduplicate" class="sr-only peer" checked>
+            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <!-- Video Play Mode -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Video Playback Mode</div>
+            <div class="text-xs text-slate-400">Choose when videos start playing</div>
+          </div>
+          <select id="settingPlayMode" class="bg-slate-950 border border-slate-800 text-xs rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500">
+            <option value="scroll">On Scroll View</option>
+            <option value="hover">On Mouse Hover</option>
+          </select>
+        </div>
+
+        <!-- Grid Size Slider -->
+        <div>
+          <div class="flex justify-between text-sm font-medium text-slate-200 mb-1">
+            <span>Grid Item Size</span>
+            <span id="gridSizeLabel" class="text-xs text-blue-400 font-normal">Medium</span>
+          </div>
+          <input type="range" id="settingGridSize" min="1" max="4" value="2" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600">
+        </div>
+
+        <!-- Aspect Ratio Selector -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium text-slate-200">Thumbnail Fit Mode</div>
+            <div class="text-xs text-slate-400">Fill box or maintain ratio</div>
+          </div>
+          <select id="settingFitMode" class="bg-slate-950 border border-slate-800 text-xs rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500">
+            <option value="cover">Square Cover</option>
+            <option value="contain">Original Aspect Fit</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+        <button id="saveSettingsBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHTBOX / FULLSCREEN VIEWER -->
+  <div id="lightbox" class="fixed inset-0 bg-black/95 z-50 flex flex-col justify-between hidden opacity-0 transition-opacity duration-200">
+    <!-- Lightbox Header -->
+    <div class="h-14 px-4 flex items-center justify-between border-b border-slate-800/60 bg-slate-900/40 backdrop-blur-md z-10">
+      <div class="flex items-center space-x-3 overflow-hidden">
+        <span id="lightboxBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600 text-white uppercase">VID</span>
+        <button id="lightboxTitleBtn" type="button" class="group flex items-center space-x-1.5 text-sm font-medium text-slate-200 hover:text-white truncate max-w-xs sm:max-w-md px-2 py-1 rounded-md hover:bg-slate-800/60 transition focus:outline-none focus:ring-2 focus:ring-blue-500/50" title="Click to copy filename" aria-label="Copy filename to clipboard">
+          <span id="lightboxTitle" class="truncate">filename.mp4</span>
+          <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400 shrink-0 transition"></i>
+        </button>
+        <span id="copyToast" class="hidden text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse">Copied!</span>
+        <span id="lightboxSize" class="text-xs text-slate-400 hidden sm:inline">0 MB</span>
+      </div>
+      
+      <div class="flex items-center space-x-2">
+        <button id="lightboxFullscreen" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/60 transition" title="Toggle Fullscreen">
+          <i data-lucide="maximize" class="w-5 h-5"></i>
+        </button>
+        <button id="lightboxClose" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/60 transition" title="Close (Esc)">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Lightbox Body / Media Container -->
+    <div class="flex-1 relative flex items-center justify-center p-4 min-h-0 overflow-hidden" id="lightboxBody">
+      <!-- Media content dynamically injected here -->
+      
+      <!-- Nav Buttons -->
+      <button id="lightboxPrev" class="absolute left-4 top-1/2 -translate-y-1/2 bg-slate-900/60 hover:bg-slate-800 text-slate-200 p-3 rounded-full backdrop-blur-md border border-slate-700/50 transition active:scale-95 z-20" title="Previous (Left Arrow)">
+        <i data-lucide="chevron-left" class="w-6 h-6"></i>
+      </button>
+      <button id="lightboxNext" class="absolute right-4 top-1/2 -translate-y-1/2 bg-slate-900/60 hover:bg-slate-800 text-slate-200 p-3 rounded-full backdrop-blur-md border border-slate-700/50 transition active:scale-95 z-20" title="Next (Right Arrow)">
+        <i data-lucide="chevron-right" class="w-6 h-6"></i>
+      </button>
+    </div>
+
+    <!-- Lightbox Footer Info -->
+    <div class="h-12 px-4 flex items-center justify-center border-t border-slate-800/60 bg-slate-900/40 backdrop-blur-md text-xs text-slate-400">
+      <span id="lightboxIndex">1 / 100</span>
+    </div>
+  </div>
+
+  <!-- CORE LOGIC & LAZY LOAD ENGINE -->
+  <script>
+    // Load Settings from LocalStorage
+    const savedSettings = JSON.parse(localStorage.getItem('lms_settings') || '{}');
+
+    // Default Static Favicon SVG Data URL
+    const DEFAULT_FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>";
+
+    // State Store
+    const state = {
+      assets: [],            // Array of loaded file objects { id, file, url, type, name, size, hash, isDuplicate }
+      filteredAssets: [],    // Currently displayed items after search/filters
+      currentIndex: -1,      // Current index active in lightbox (-1 = inactive)
+      knownHashes: new Set(),// Store of SHA-256 content hashes
+      processingQueue: Promise.resolve(), // Queue promise to handle concurrent import race conditions
+      settings: {
+        autoplay: savedSettings.autoplay ?? true,
+        muted: savedSettings.muted ?? true,
+        playMode: savedSettings.playMode || 'scroll',   // 'scroll' or 'hover'
+        gridSize: savedSettings.gridSize || 2,         // 1: small, 2: medium, 3: large, 4: extra large
+        fitMode: savedSettings.fitMode || 'cover',     // 'cover' or 'contain'
+        showProgressBar: savedSettings.showProgressBar ?? true,
+        showDuplicates: savedSettings.showDuplicates ?? false
+      },
+      activeFilter: 'all',
+      searchQuery: ''
+    };
+
+    // Offscreen 48x48 Favicon Canvas
+    const faviconCanvas = document.createElement('canvas');
+    faviconCanvas.width = 48;
+    faviconCanvas.height = 48;
+    const faviconCtx = faviconCanvas.getContext('2d', { willReadFrequently: true });
+
+    // DOM Element References
+    const elements = {
+      dynamicFavicon: document.getElementById('dynamicFavicon'),
+      scrollProgressBar: document.getElementById('scrollProgressBar'),
+      folderInput: document.getElementById('folderInput'),
+      fileInput: document.getElementById('fileInput'),
+      selectFolderBtn: document.getElementById('selectFolderBtn'),
+      selectFilesBtn: document.getElementById('selectFilesBtn'),
+      clearBtn: document.getElementById('clearBtn'),
+      settingsBtn: document.getElementById('settingsBtn'),
+      mediaGrid: document.getElementById('mediaGrid'),
+      galleryContainer: document.getElementById('galleryContainer'),
+      emptyState: document.getElementById('emptyState'),
+      statsCount: document.getElementById('statsCount'),
+      searchInput: document.getElementById('searchInput'),
+      filterBtns: document.querySelectorAll('.filter-btn'),
+      // Settings Modal
+      settingsModal: document.getElementById('settingsModal'),
+      settingsBox: document.getElementById('settingsBox'),
+      closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+      saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+      settingAutoplay: document.getElementById('settingAutoplay'),
+      settingMuted: document.getElementById('settingMuted'),
+      settingPlayMode: document.getElementById('settingPlayMode'),
+      settingGridSize: document.getElementById('settingGridSize'),
+      settingFitMode: document.getElementById('settingFitMode'),
+      settingShowProgressBar: document.getElementById('settingShowProgressBar'),
+      settingShowDuplicates: document.getElementById('settingShowDuplicates'),
+      gridSizeLabel: document.getElementById('gridSizeLabel'),
+      // Lightbox
+      lightbox: document.getElementById('lightbox'),
+      lightboxBody: document.getElementById('lightboxBody'),
+      lightboxTitle: document.getElementById('lightboxTitle'),
+      lightboxTitleBtn: document.getElementById('lightboxTitleBtn'),
+      copyToast: document.getElementById('copyToast'),
+      lightboxBadge: document.getElementById('lightboxBadge'),
+      lightboxSize: document.getElementById('lightboxSize'),
+      lightboxIndex: document.getElementById('lightboxIndex'),
+      lightboxClose: document.getElementById('lightboxClose'),
+      lightboxPrev: document.getElementById('lightboxPrev'),
+      lightboxNext: document.getElementById('lightboxNext'),
+      lightboxFullscreen: document.getElementById('lightboxFullscreen')
+    };
+
+    // Save Settings Helper
+    function saveSettings() {
+      localStorage.setItem('lms_settings', JSON.stringify(state.settings));
+    }
+
+    // Initialize UI settings controls from state
+    function initSettingsUI() {
+      elements.settingAutoplay.checked = state.settings.autoplay;
+      elements.settingMuted.checked = state.settings.muted;
+      elements.settingPlayMode.value = state.settings.playMode;
+      elements.settingGridSize.value = state.settings.gridSize;
+      elements.settingFitMode.value = state.settings.fitMode;
+      elements.settingShowProgressBar.checked = state.settings.showProgressBar;
+      elements.settingShowDuplicates.checked = state.settings.showDuplicates;
+      elements.scrollProgressBar.style.display = state.settings.showProgressBar ? 'block' : 'none';
+    }
+
+    // Initialize Lucide Icons
+    lucide.createIcons();
+    initSettingsUI();
+
+    /* ==========================================================================
+       SHA-256 DEDUPLICATION & ASYNC CONTENT HASHING
+       ========================================================================== */
+    async function calculateSHA256(file) {
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function handleFileSelection(files) {
+      const validFiles = Array.from(files).filter(file => {
+        return file.type.startsWith('image/') || file.type.startsWith('video/');
+      });
+
+      if (validFiles.length === 0) return;
+
+      // Queue concurrent import operations to prevent race conditions during SHA computation
+      state.processingQueue = state.processingQueue.then(async () => {
+        const newAssets = [];
+
+        for (const file of validFiles) {
+          try {
+            const hash = await calculateSHA256(file);
+            const isDuplicate = state.knownHashes.has(hash);
+
+            if (!isDuplicate) {
+              state.knownHashes.add(hash);
+            }
+
+            const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+            const isVideo = file.type.startsWith('video/');
+            const type = isVideo ? 'video' : (isGif ? 'gif' : 'image');
+
+            newAssets.push({
+              id: `asset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              file: file,
+              url: URL.createObjectURL(file),
+              type: type,
+              name: file.name,
+              size: formatBytes(file.size),
+              hash: hash,
+              isDuplicate: isDuplicate
+            });
+          } catch (err) {
+            console.error('Error hashing file:', file.name, err);
+          }
+        }
+
+        state.assets = [...state.assets, ...newAssets];
+        applyFiltersAndRender();
+      });
+    }
+
+    /* ==========================================================================
+       SCROLL PROGRESS CALCULATION & OBSERVATION
+       ========================================================================== */
+    function updateScrollProgress() {
+      const scrollableHeight = elements.galleryContainer.scrollHeight - elements.galleryContainer.clientHeight;
+      if (scrollableHeight <= 0) {
+        elements.scrollProgressBar.style.width = '0%';
+        return;
+      }
+      const scrolled = (elements.galleryContainer.scrollTop / scrollableHeight) * 100;
+      elements.scrollProgressBar.style.width = `${Math.min(100, Math.max(0, scrolled))}%`;
+    }
+
+    elements.galleryContainer.addEventListener('scroll', updateScrollProgress, { passive: true });
+    window.addEventListener('resize', updateScrollProgress, { passive: true });
+
+    // Mutation Observer for layout changes altering scroll height
+    const gridResizeObserver = new ResizeObserver(updateScrollProgress);
+    gridResizeObserver.observe(elements.mediaGrid);
+
+    /* ==========================================================================
+       DYNAMIC FAVICON & TITLE MANAGEMENT
+       ========================================================================== */
+    function updateDocumentTitle() {
+      const isLightboxActive = state.currentIndex >= 0 && !elements.lightbox.classList.contains('hidden');
+      const hasFocus = document.hasFocus();
+
+      if (isLightboxActive) {
+        const activeAsset = state.filteredAssets[state.currentIndex];
+        const fileName = activeAsset ? activeAsset.name : '';
+        if (hasFocus) {
+          document.title = `Local Media Studio - ${fileName}`;
+        } else {
+          document.title = fileName;
+        }
+      } else {
+        document.title = 'Local Media Studio';
+      }
+    }
+
+    function renderDynamicFavicon() {
+      if (state.currentIndex < 0 || elements.lightbox.classList.contains('hidden')) {
+        elements.dynamicFavicon.href = DEFAULT_FAVICON;
+        return;
+      }
+
+      const activeMedia = elements.lightboxBody.querySelector('img, video');
+      if (!activeMedia) return;
+
+      try {
+        faviconCtx.clearRect(0, 0, 48, 48);
+
+        // Draw active media frame to 48x48 canvas preserving aspect ratio fill
+        const width = activeMedia.videoWidth || activeMedia.naturalWidth || 48;
+        const height = activeMedia.videoHeight || activeMedia.naturalHeight || 48;
+        const minDim = Math.min(width, height);
+        const sx = (width - minDim) / 2;
+        const sy = (height - minDim) / 2;
+
+        faviconCtx.drawImage(activeMedia, sx, sy, minDim, minDim, 0, 0, 48, 48);
+
+        // If window blurred, apply grayscale pixel conversion
+        if (!document.hasFocus()) {
+          const imgData = faviconCtx.getImageData(0, 0, 48, 48);
+          const data = imgData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const avg = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+            data[i] = avg;     // Red
+            data[i + 1] = avg; // Green
+            data[i + 2] = avg; // Blue
+          }
+          faviconCtx.putImageData(imgData, 0, 0);
+        }
+
+        elements.dynamicFavicon.href = faviconCanvas.toDataURL('image/png');
+      } catch (e) {
+        // Fallback gracefully on cross-origin or unloaded media frame
+        elements.dynamicFavicon.href = DEFAULT_FAVICON;
+      }
+    }
+
+    window.addEventListener('focus', () => {
+      updateDocumentTitle();
+      renderDynamicFavicon();
+    });
+
+    window.addEventListener('blur', () => {
+      updateDocumentTitle();
+      renderDynamicFavicon();
+    });
+
+    /* ==========================================================================
+       INTERSECTION OBSERVER ENGINE
+       ========================================================================== */
+    const lazyLoadObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const card = entry.target;
+        const mediaType = card.dataset.type;
+        const mediaUrl = card.dataset.url;
+        const mediaContainer = card.querySelector('.media-content-holder');
+
+        if (entry.isIntersecting) {
+          if (!mediaContainer.dataset.loaded) {
+            if (mediaType === 'video') {
+              const video = document.createElement('video');
+              video.src = mediaUrl;
+              video.className = `w-full h-full object-${state.settings.fitMode} transition-opacity duration-300 opacity-0`;
+              video.playsInline = true;
+              video.muted = state.settings.muted;
+              video.loop = true;
+              video.preload = 'metadata';
+
+              video.onloadeddata = () => {
+                video.classList.remove('opacity-0');
+                const skeleton = card.querySelector('.skeleton-loading');
+                if (skeleton) skeleton.remove();
+              };
+
+              if (state.settings.autoplay && state.settings.playMode === 'scroll') {
+                video.play().catch(() => {});
+              }
+
+              mediaContainer.appendChild(video);
+            } else {
+              const img = document.createElement('img');
+              img.src = mediaUrl;
+              img.className = `w-full h-full object-${state.settings.fitMode} transition-opacity duration-300 opacity-0`;
+              img.loading = 'lazy';
+
+              img.onload = () => {
+                img.classList.remove('opacity-0');
+                const skeleton = card.querySelector('.skeleton-loading');
+                if (skeleton) skeleton.remove();
+              };
+
+              mediaContainer.appendChild(img);
+            }
+            mediaContainer.dataset.loaded = 'true';
+          } else {
+            if (mediaType === 'video') {
+              const video = mediaContainer.querySelector('video');
+              if (video && state.settings.autoplay && state.settings.playMode === 'scroll') {
+                video.play().catch(() => {});
+              }
+            }
+          }
+        } else {
+          if (mediaType === 'video') {
+            const video = mediaContainer.querySelector('video');
+            if (video) video.pause();
+          }
+        }
+      });
+    }, {
+      root: elements.galleryContainer,
+      rootMargin: '200px 0px',
+      threshold: 0.01
+    });
+
+    /* ==========================================================================
+       FILE & MEDIA PROCESSING ENGINE
+       ========================================================================== */
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function clearAllAssets() {
+      state.assets.forEach(asset => URL.revokeObjectURL(asset.url));
+      state.assets = [];
+      state.filteredAssets = [];
+      state.knownHashes.clear();
+      elements.mediaGrid.innerHTML = '';
+      updateStats();
+      elements.emptyState.classList.remove('hidden');
+      updateScrollProgress();
+    }
+
+    /* ==========================================================================
+       GRID RENDERING ENGINE
+       ========================================================================== */
+    function applyFiltersAndRender() {
+      state.filteredAssets = state.assets.filter(asset => {
+        // Deduplication visibility filtering
+        if (asset.isDuplicate && !state.settings.showDuplicates) {
+          return false;
+        }
+
+        const matchesFilter = state.activeFilter === 'all' || asset.type === state.activeFilter;
+        const matchesSearch = asset.name.toLowerCase().includes(state.searchQuery.toLowerCase());
+        return matchesFilter && matchesSearch;
+      });
+
+      updateStats();
+
+      elements.mediaGrid.innerHTML = '';
+
+      if (state.filteredAssets.length === 0) {
+        if (state.assets.length > 0) {
+          elements.mediaGrid.innerHTML = `<div class="col-span-full py-20 text-center text-slate-500 text-sm">No items match your filter criteria.</div>`;
+        } else {
+          elements.emptyState.classList.remove('hidden');
+        }
+        updateScrollProgress();
+        return;
+      }
+
+      elements.emptyState.classList.add('hidden');
+
+      const fragment = document.createDocumentFragment();
+
+      state.filteredAssets.forEach((asset, index) => {
+        const card = document.createElement('div');
+        card.className = 'media-card relative group aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 cursor-pointer hover:border-blue-500/50 transition-all duration-150';
+        card.dataset.id = asset.id;
+        card.dataset.url = asset.url;
+        card.dataset.type = asset.type;
+        card.dataset.index = index;
+
+        let badgeColor = 'bg-blue-600';
+        if (asset.type === 'video') badgeColor = 'bg-purple-600';
+        if (asset.type === 'gif') badgeColor = 'bg-emerald-600';
+
+        card.innerHTML = `
+          <div class="skeleton-loading absolute inset-0"></div>
+          <div class="media-content-holder w-full h-full"></div>
+
+          <!-- Top Badge & Duplicate Indicator -->
+          <div class="absolute top-2 left-2 z-10 flex items-center space-x-1">
+            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${badgeColor} text-white uppercase tracking-wider shadow">
+              ${asset.type.toUpperCase()}
+            </span>
+            ${asset.isDuplicate ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-600 text-white uppercase tracking-wider shadow" title="Duplicate Content">DUP</span>` : ''}
+          </div>
+
+          <!-- Hover Overlay Info -->
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-2.5 z-10">
+            <p class="text-xs font-semibold text-slate-100 truncate">${escapeHtml(asset.name)}</p>
+            <p class="text-[10px] text-slate-400">${asset.size}</p>
+          </div>
+        `;
+
+        card.addEventListener('click', () => openLightbox(index));
+
+        if (asset.type === 'video') {
+          card.addEventListener('mouseenter', () => {
+            if (state.settings.playMode === 'hover') {
+              const vid = card.querySelector('video');
+              if (vid) vid.play().catch(() => {});
+            }
+          });
+          card.addEventListener('mouseleave', () => {
+            if (state.settings.playMode === 'hover') {
+              const vid = card.querySelector('video');
+              if (vid) vid.pause();
+            }
+          });
+        }
+
+        lazyLoadObserver.observe(card);
+        fragment.appendChild(card);
+      });
+
+      elements.mediaGrid.appendChild(fragment);
+      updateScrollProgress();
+    }
+
+    function updateStats() {
+      const count = state.filteredAssets.length;
+      const total = state.assets.length;
+      const duplicates = state.assets.filter(a => a.isDuplicate).length;
+      elements.statsCount.textContent = `${count} of ${total} item${total === 1 ? '' : 's'} displayed${duplicates > 0 ? ` (${duplicates} duplicates)` : ''}`;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    /* ==========================================================================
+       GRID SIZE & FIT MODE CONTROLS
+       ========================================================================== */
+    function updateGridStyle() {
+      const sizes = {
+        1: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10',
+        2: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
+        3: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+        4: 'grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3'
+      };
+      
+      const labels = { 1: 'Compact', 2: 'Medium', 3: 'Large', 4: 'Extra Large' };
+      elements.gridSizeLabel.textContent = labels[state.settings.gridSize];
+
+      elements.mediaGrid.className = `grid gap-3 transition-all duration-200 auto-rows-fr ${sizes[state.settings.gridSize]}`;
+
+      const mediaElements = elements.mediaGrid.querySelectorAll('img, video');
+      mediaElements.forEach(el => {
+        el.className = el.className.replace(/object-(cover|contain)/, `object-${state.settings.fitMode}`);
+      });
+
+      updateScrollProgress();
+    }
+
+    /* ==========================================================================
+       LIGHTBOX / FULLSCREEN VIEWER LOGIC
+       ========================================================================== */
+    function openLightbox(index) {
+      state.currentIndex = index;
+      renderLightboxContent();
+      elements.lightbox.classList.remove('hidden');
+      setTimeout(() => elements.lightbox.classList.remove('opacity-0'), 10);
+      updateDocumentTitle();
+    }
+
+    function closeLightbox() {
+      state.currentIndex = -1;
+      elements.lightbox.classList.add('opacity-0');
+      setTimeout(() => {
+        elements.lightbox.classList.add('hidden');
+        elements.lightboxBody.innerHTML = '';
+      }, 200);
+      updateDocumentTitle();
+      renderDynamicFavicon();
+    }
+
+    function renderLightboxContent() {
+      const asset = state.filteredAssets[state.currentIndex];
+      if (!asset) return;
+
+      elements.lightboxTitle.textContent = asset.name;
+      elements.lightboxSize.textContent = asset.size;
+      elements.lightboxBadge.textContent = asset.type.toUpperCase();
+      elements.lightboxIndex.textContent = `${state.currentIndex + 1} / ${state.filteredAssets.length}`;
+
+      elements.lightboxBody.innerHTML = '';
+
+      if (asset.type === 'video') {
+        const video = document.createElement('video');
+        video.src = asset.url;
+        video.controls = true;
+        video.autoplay = true;
+        video.muted = state.settings.muted;
+        video.loop = true;
+        video.draggable = false;
+        video.className = 'max-w-full max-h-full rounded-lg shadow-2xl object-contain select-none z-10 pointer-events-auto';
+        video.addEventListener('dragstart', (e) => e.preventDefault());
+        video.onloadeddata = renderDynamicFavicon;
+        video.onseeked = renderDynamicFavicon;
+        elements.lightboxBody.appendChild(video);
+      } else {
+        const img = document.createElement('img');
+        img.src = asset.url;
+        img.draggable = false;
+        img.className = 'max-w-full max-h-full rounded-lg shadow-2xl object-contain select-none z-10 pointer-events-auto';
+        img.addEventListener('dragstart', (e) => e.preventDefault());
+        img.onload = renderDynamicFavicon;
+        elements.lightboxBody.appendChild(img);
+      }
+
+      updateDocumentTitle();
+    }
+
+    function prevLightbox() {
+      if (state.filteredAssets.length === 0) return;
+      state.currentIndex = (state.currentIndex - 1 + state.filteredAssets.length) % state.filteredAssets.length;
+      renderLightboxContent();
+    }
+
+    function nextLightbox() {
+      if (state.filteredAssets.length === 0) return;
+      state.currentIndex = (state.currentIndex + 1) % state.filteredAssets.length;
+      renderLightboxContent();
+    }
+
+    /* ==========================================================================
+       EVENT LISTENERS & BINDINGS
+       ========================================================================== */
+    elements.selectFolderBtn.addEventListener('click', () => elements.folderInput.click());
+    elements.selectFilesBtn.addEventListener('click', () => elements.fileInput.click());
+
+    elements.folderInput.addEventListener('change', (e) => handleFileSelection(e.target.files));
+    elements.fileInput.addEventListener('change', (e) => handleFileSelection(e.target.files));
+
+    elements.clearBtn.addEventListener('click', () => {
+      if (state.assets.length > 0) {
+        clearAllAssets();
+      }
+    });
+
+    elements.searchInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value;
+      applyFiltersAndRender();
+    });
+
+    elements.filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const newFilter = btn.dataset.filter;
+        // Ignore click if requested filter criterion is already active
+        if (state.activeFilter === newFilter) return;
+
+        elements.filterBtns.forEach(b => {
+          b.className = 'filter-btn px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition';
+        });
+        btn.className = 'filter-btn px-3 py-1 rounded-md bg-blue-600 text-white transition';
+        state.activeFilter = newFilter;
+        applyFiltersAndRender();
+      });
+    });
+
+    // Click to Copy Filename Handler with Clipboard API and fallback
+    elements.lightboxTitleBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent backdrop dismissal or media nav propagation
+      const asset = state.filteredAssets[state.currentIndex];
+      if (!asset) return;
+
+      const filename = asset.name;
+
+      const showCopySuccess = () => {
+        elements.copyToast.classList.remove('hidden');
+        setTimeout(() => {
+          elements.copyToast.classList.add('hidden');
+        }, 1800);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(filename)
+          .then(showCopySuccess)
+          .catch(() => fallbackCopy(filename, showCopySuccess));
+      } else {
+        fallbackCopy(filename, showCopySuccess);
+      }
+    });
+
+    function fallbackCopy(text, onSuccess) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (successful && onSuccess) onSuccess();
+      } catch (err) {
+        console.error('Failed to copy filename: ', err);
+      }
+    }
+
+    // Backdrop dismissal handler: Close lightbox when clicking outside media elements
+    elements.lightbox.addEventListener('click', (e) => {
+      // If click originated inside active media element or controls/nav buttons, ignore backdrop close
+      if (e.target.closest('#lightboxBody img, #lightboxBody video, button, header, footer')) {
+        return;
+      }
+      closeLightbox();
+    });
+
+    elements.settingsBtn.addEventListener('click', () => {
+      elements.settingsModal.classList.remove('hidden');
+      setTimeout(() => {
+        elements.settingsModal.classList.remove('opacity-0');
+        elements.settingsBox.classList.remove('scale-95');
+      }, 10);
+    });
+
+    const closeSettings = () => {
+      elements.settingsModal.classList.add('opacity-0');
+      elements.settingsBox.classList.add('scale-95');
+      setTimeout(() => elements.settingsModal.classList.add('hidden'), 200);
+    };
+
+    elements.closeSettingsBtn.addEventListener('click', closeSettings);
+    elements.saveSettingsBtn.addEventListener('click', closeSettings);
+
+    elements.settingAutoplay.addEventListener('change', (e) => {
+      state.settings.autoplay = e.target.checked;
+      saveSettings();
+    });
+
+    elements.settingMuted.addEventListener('change', (e) => {
+      state.settings.muted = e.target.checked;
+      saveSettings();
+    });
+
+    elements.settingPlayMode.addEventListener('change', (e) => {
+      state.settings.playMode = e.target.value;
+      saveSettings();
+    });
+
+    elements.settingGridSize.addEventListener('input', (e) => {
+      state.settings.gridSize = parseInt(e.target.value);
+      saveSettings();
+      updateGridStyle();
+    });
+
+    elements.settingFitMode.addEventListener('change', (e) => {
+      state.settings.fitMode = e.target.value;
+      saveSettings();
+      updateGridStyle();
+    });
+
+    elements.settingShowProgressBar.addEventListener('change', (e) => {
+      state.settings.showProgressBar = e.target.checked;
+      elements.scrollProgressBar.style.display = state.settings.showProgressBar ? 'block' : 'none';
+      saveSettings();
+    });
+
+    elements.settingShowDuplicates.addEventListener('change', (e) => {
+      state.settings.showDuplicates = e.target.checked;
+      saveSettings();
+      applyFiltersAndRender();
+    });
+
+    elements.lightboxClose.addEventListener('click', closeLightbox);
+    elements.lightboxPrev.addEventListener('click', prevLightbox);
+    elements.lightboxNext.addEventListener('click', nextLightbox);
+
+    elements.lightboxFullscreen.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        elements.lightbox.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (!elements.lightbox.classList.contains('hidden')) {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') prevLightbox();
+        if (e.key === 'ArrowRight') nextLightbox();
+      }
+    });
+
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFileSelection(e.dataTransfer.files);
+      }
+    });
+
+    updateGridStyle();
+  </script>
+</body>
+</html>
